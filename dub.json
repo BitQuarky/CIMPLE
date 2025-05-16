@@ -1,0 +1,9 @@
+{
+	"authors": [
+		"Liam Moser"
+	],
+	"copyright": "Copyright © 2025, Liam Moser",
+	"description": "the simple, Concatenative, IMPerative LanguagE",
+	"license": "MIT",
+	"name": "cimple"
+}
