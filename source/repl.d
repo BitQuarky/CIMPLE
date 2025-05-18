@@ -38,6 +38,7 @@ int repl(bool cdebug) {
     foreach (string s; line.splitter(' ')) {
       if (s[0] == '"') {
         stringmode = true;
+        stacksize++;
         strstart = strpos;
         int delta = strpos;
         for (; strpos-delta < s.length-1; strpos++) {
@@ -95,6 +96,43 @@ int repl(bool cdebug) {
           for (; tmp[len]!=0; len++) { }
           char[] strn = tmp[0..len];
           writeln(strn);
+          stacksize--;
+          stack.removeFront();
+          break;
+        case("dup"):
+          if (stack.empty()) {
+            writeln("stack underflow");
+            break;
+          }
+          stack.insertFront(stack.front());
+          stacksize++;
+          break;
+        case("swap"):
+           if (stacksize < 2) {
+            writeln("stack underflow");
+            break;
+          }
+          long x = stack.front();
+          stack.removeFront();
+          long y = stack.front();
+          stack.insertFront(x);
+          stack.insertFront(y);
+          break;
+        case("rot"):
+          if (stacksize < 3) {
+            writeln("stack underflow");
+            break;
+          }
+          long f = stack.front();
+          stack.removeFront();
+          stack.insertAfter(std.range.take(stack[], 2), f);
+          break;
+        case("drop"):
+          if (stacksize < 1) {
+            writeln("stack underflow");
+            break;
+          }
+          stack.removeFront();
           stacksize--;
           break;
         case("+"):
