@@ -57,11 +57,7 @@ void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str
         stringmode = false;
         stack.insertFront(cast(long) str[strstart..$].ptr);
       }
-    } else if (isNumeric(s)) {
-      stack.insertFront(to!long(s));
-      if (cdebug) writeln("number");
-      stacksize++;
-    } else if (s[$-1] == '"') {
+    }  else if (s[$-1] == '"') {
       str[strpos++] = ' ';
       int delta = strpos;
       writeln("here");
@@ -81,6 +77,10 @@ void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str
         str[strpos] = s[strpos-delta];
       }
 
+    } else if (isNumeric(s)) {
+      stack.insertFront(to!long(s));
+      if (cdebug) writeln("number");
+      stacksize++;
     } else switch(s) {
       case("exit"):
         exitloop = true;
@@ -142,6 +142,47 @@ void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str
         }
         stack.removeFront();
         stacksize--;
+        break;
+      case("eval"):
+        if (stack.empty()) {
+          writeln("stack underflow");
+          break;
+        }
+        char* tmp = cast(char*) stack.front();
+        int len = 0;
+        for (; tmp[len]!=0; len++) { }
+        string strn = cast(string) tmp[0..len];
+        stacksize--;
+        stack.removeFront();
+        eval(strn.split(' '), stack, stacksize, str, strpos, exitloop, cdebug);
+        break;
+      case("times"):
+        if (stacksize < 2) {
+          writeln("stack underflow");
+          break;
+        }
+        long times = stack.front();
+        stack.removeFront();
+        long ptr = stack.front();
+        stack.removeFront();
+        stacksize -= 2;
+        char* tmp = cast(char*) ptr;
+        int len = 0;
+        for (; tmp[len]!=0; len++) { }
+        string strn = cast(string) tmp[0..len];
+        for (; times > 0; times--) { 
+          eval(strn.split(' '), stack, stacksize, str, strpos, exitloop, cdebug);
+        }
+        break;
+      case("height"):
+        stack.insertFront(stacksize);
+        stacksize++;
+        break;
+      case("clear"):
+        while (!stack.empty()) {
+          stack.removeFront();
+        }
+        stacksize = 0;
         break;
       case("+"):
         if (stacksize < 2) {
