@@ -25,6 +25,7 @@ int repl(bool cdebug) {
   int stacksize = 0;
   char[] buf = processAllocator.makeArray!char(64);
   char[] str = processAllocator.makeArray!char(128);
+  string[][] wordtable;
   int strpos = 0;
   bool exitloop = false; 
   writeln("starting in interactive mode.\ntype 'exit' to exit the repl.\ntype '?' for general help.\ntype '?' followed by a\nword for documentation.");
@@ -33,18 +34,32 @@ int repl(bool cdebug) {
     readln(buf);
     string line = cast(string) buf[0..buf.indexOf("\n")];
     if (cdebug) writeln(line, " length is ", line.length);
-    eval(line.split(' '), stack, stacksize, str, strpos, exitloop, cdebug);
+    eval(line.split(' '), stack, stacksize, str, strpos, exitloop, wordtable, cdebug);
   }
   processAllocator.dispose(buf);
   processAllocator.dispose(str);
   return 0;
 }
 
-void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str, ref int strpos, ref bool exitloop, bool cdebug) {
-  bool stringmode = false;
+void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str, ref int strpos, ref bool exitloop, ref string[][] wordtable, bool cdebug) {
+  bool stringmode = false, wordmode = false;
   int strstart = strpos;
   foreach (string s; line) {
-    if (s[0] == '"') {
+    if (s[$-1] == ':') {
+      if (s[0] == ':')  { //anonymous function
+        //TODO:
+        //implement anonymous words.
+        //treat as string or callback word?
+      } else {
+        wordtable ~= [s[0..$-1]];
+        wordmode = true;
+      }
+    } else if(s[$-1] == ';' && wordmode) {
+      wordtable[$-1] ~= s[0..$-1];
+      wordmode = false;
+    } else if (wordmode) {
+      wordtable[$-1] ~= s;
+    } else if (s[0] == '"') {
       stringmode = true;
       stacksize++;
       strstart = strpos;
@@ -154,7 +169,7 @@ void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str
         string strn = cast(string) tmp[0..len];
         stacksize--;
         stack.removeFront();
-        eval(strn.split(' '), stack, stacksize, str, strpos, exitloop, cdebug);
+        eval(strn.split(' '), stack, stacksize, str, strpos, exitloop, wordtable, cdebug);
         break;
       case("times"):
         if (stacksize < 2) {
@@ -171,7 +186,7 @@ void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str
         for (; tmp[len]!=0; len++) { }
         string strn = cast(string) tmp[0..len];
         for (; times > 0; times--) { 
-          eval(strn.split(' '), stack, stacksize, str, strpos, exitloop, cdebug);
+          eval(strn.split(' '), stack, stacksize, str, strpos, exitloop, wordtable, cdebug);
         }
         break;
       case("height"):
@@ -225,7 +240,19 @@ void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str
         stack.insertFront(binaryWord(stack, (long x, long y) { return x%y; }));
         break;
       default:
-        writeln("unknown word '", s, "'");
+        int idx = 0;
+        bool found = false;
+        for (;idx<wordtable.length;idx++) {
+          if (wordtable[idx][0] == s) {
+            found = true;
+            break;
+          }
+        }
+        if (found) {
+          eval(wordtable[idx][1..$], stack, stacksize, str, strpos, exitloop, wordtable, cdebug);
+        } else {
+          writeln("unknown word '", s, "'");
+        }
     }
     if (exitloop) break;
   }
