@@ -54,7 +54,9 @@ void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str
   bool stringmode = false, wordmode = false, stringdef = false;
   int strstart = strpos;
   foreach (string s; line) {
-    if (s[$-1] == ':') {
+    if (s.empty()) {
+
+    } else if (s[$-1] == ':') {
       if (s[0] == ':')  { //anonymous function
         //TODO:
         //implement anonymous words.
@@ -194,9 +196,11 @@ void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str
         stack.insertAfter(std.range.take(stack[], n), stack.front());
         stack.removeFront();
         auto t = std.range.drop(stack[], n);
-        long tmp = t.front();
-        stack.linearRemove(std.range.take(t, 1));
-        stack.insertFront(tmp);
+        if (!t.empty()) {
+          long tmp = t.front();
+          stack.linearRemove(std.range.take(t, 1));
+          stack.insertFront(tmp);
+        }
         break;
       case("rot"):
         if (stacksize < 3) {
@@ -207,6 +211,22 @@ void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str
         stack.removeFront();
         stack.insertAfter(std.range.take(stack[], 2), f);
         break;
+      case("rotn"):
+        if (stacksize < 3) {
+          writeln("stack underflow");
+          break;
+        }
+        long times = stack.front();
+        stack.removeFront();
+        long count = stack.front()-1;
+        stack.removeFront();
+        stacksize-=2;
+        for (;times;times--) {
+          long cur = stack.front();
+          stack.removeFront();
+          stack.insertAfter(std.range.take(stack[], count), cur);
+        }
+        break;
       case("drop"):
         if (stacksize < 1) {
           writeln("stack underflow");
@@ -214,6 +234,19 @@ void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str
         }
         stack.removeFront();
         stacksize--;
+        break;
+      case("dropn"):
+        if (stacksize < 1) {
+          writeln("stack underflow");
+          break;
+        }
+        long count = stack.front();
+        stack.removeFront();
+        stacksize--;
+        for (;count && stacksize;count--) { 
+          stack.removeFront(); 
+          stacksize--; 
+        }
         break;
       case("eval"):
         if (stack.empty()) {
