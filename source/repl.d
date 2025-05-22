@@ -33,6 +33,7 @@ int repl(bool cdebug) {
   int stacksize = 0;
   char[] buf = new char[](64);
   char[] str = new char[](128);
+  int[] strindx = [];
   string[][] wordtable;
   int strpos = 0;
   bool exitloop = false; 
@@ -42,15 +43,15 @@ int repl(bool cdebug) {
     readln(buf);
     string line = cast(string) buf[0..buf.indexOf("\n")];
     if (cdebug) writeln(line, " length is ", line.length);
-    eval(line.split(' '), stack, stacksize, str, strpos, exitloop, wordtable, cdebug);
+    eval(line.split(' '), stack, stacksize, str, strindx, strpos, exitloop, wordtable, cdebug);
   }
   //printrocessAllocator.dispose(buf);
   //processAllocator.dispose(str);
   return 0;
 }
 
-void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str, ref int strpos, ref bool exitloop, ref string[][] wordtable, bool cdebug) {
-  bool stringmode = false, wordmode = false;
+void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str, ref int[] strindx, ref int strpos, ref bool exitloop, ref string[][] wordtable, bool cdebug) {
+  bool stringmode = false, wordmode = false, stringdef = false;
   int strstart = strpos;
   foreach (string s; line) {
     if (s[$-1] == ':') {
@@ -73,6 +74,7 @@ void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str
       stringmode = true;
       stacksize++;
       strstart = strpos;
+      strindx ~= strstart;
       int delta = strpos;
       for (; strpos-delta < s.length-1; strpos++) {
         str[strpos] = s[strpos-delta+1];
@@ -102,6 +104,11 @@ void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str
         str[strpos] = s[strpos-delta];
       }
 
+    } else if (s[0] == '$') {
+      int num = to!int(s[1..$]);
+      if (cdebug) writeln(strindx);
+      stack.insertFront(cast(long) str[strindx[num]..$].ptr);
+      stacksize++;
     } else if (isNumeric(s)) {
       stack.insertFront(to!long(s));
       if (cdebug) writeln("number");
@@ -172,6 +179,7 @@ void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str
         long x = stack.front();
         stack.removeFront();
         long y = stack.front();
+        stack.removeFront();
         stack.insertFront(x);
         stack.insertFront(y);
         break;
@@ -218,7 +226,7 @@ void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str
         string strn = cast(string) tmp[0..len];
         stacksize--;
         stack.removeFront();
-        eval(strn.split(' '), stack, stacksize, str, strpos, exitloop, wordtable, cdebug);
+        eval(strn.split(' '), stack, stacksize, str, strindx, strpos, exitloop, wordtable, cdebug);
         break;
       case("times"):
         if (stacksize < 2) {
@@ -235,7 +243,7 @@ void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str
         for (; tmp[len]!=0; len++) { }
         string strn = cast(string) tmp[0..len];
         for (; times > 0; times--) { 
-          eval(strn.split(' '), stack, stacksize, str, strpos, exitloop, wordtable, cdebug);
+          eval(strn.split(' '), stack, stacksize, str, strindx, strpos, exitloop, wordtable, cdebug);
         }
         break;
       case("height"):
@@ -350,6 +358,7 @@ void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str
           break;
         }
         long cond = stack.front();
+        stacksize--;
         stack.removeFront();
         char* tmp = cast(char*) stack.front();
         int len = 0;
@@ -357,7 +366,31 @@ void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str
         string strn = cast(string) tmp[0..len];
         stacksize--;
         stack.removeFront();
-        if (cond) eval(strn.split(' '), stack, stacksize, str, strpos, exitloop, wordtable, cdebug);
+        if (cond) eval(strn.split(' '), stack, stacksize, str, strindx, strpos, exitloop, wordtable, cdebug);
+        break;
+      case("while"):
+        if (stacksize < 2) {
+          writeln("stack underflow");
+          break;
+        }
+        long cond = stack.front();
+        stack.removeFront();
+        stacksize--;
+        char* tmp = cast(char*) stack.front();
+        int len = 0;
+        for (; tmp[len]!=0; len++) { }
+        string strn = cast(string) tmp[0..len];
+        for (;cond;cond = stack.front()) { 
+          stack.removeFront();
+          stacksize--;
+          eval(strn.split(' '), stack, stacksize, str, strindx, strpos, exitloop, wordtable, cdebug); 
+          if (stacksize == 0) {
+            writeln("stack underflow");
+            break;
+          }
+        }
+        stack.removeFront();
+        stacksize--;
         break;
       default:
         int idx = 0;
@@ -369,7 +402,7 @@ void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str
           }
         }
         if (found) {
-          eval(wordtable[idx][1..$], stack, stacksize, str, strpos, exitloop, wordtable, cdebug);
+          eval(wordtable[idx][1..$], stack, stacksize, str, strindx, strpos, exitloop, wordtable, cdebug);
         } else {
           writeln("unknown word '", s, "'");
           if (cdebug) {
@@ -379,6 +412,7 @@ void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str
           }
         }
     }
+    if (cdebug) writeln(stack[]);
     if (exitloop) break;
   }
 }
