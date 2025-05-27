@@ -12,6 +12,9 @@ import std.format.spec;
 import std.range;
 import std.range.primitives;
 import std.conv;
+
+import core.sys.posix.dlfcn;
+
 long binaryWord(ref SList!long list, long function(long, long) fun) {
   long x = list.front;
   list.removeFront();
@@ -424,6 +427,116 @@ void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str
         }
         stack.removeFront();
         stacksize--;
+        break;
+      case("dlopen"):
+        if (stacksize < 1) {
+          writeln("stack underflow");
+          break;
+        }
+        stacksize--;
+        char* tmp = cast(char*) stack.front();
+        stack.removeFront();
+        int len = 0;
+        for (; tmp[len]!=0; len++) { }
+        scope const char* strn = cast(const char*) tmp[0..len];
+        void* dl = dlopen(strn, RTLD_LAZY);
+        if (!dl) {
+          writeln("failed to open dynamic library '", fromStringz(strn), "'");
+        }
+        stack.insertFront(cast(long) dl);
+        stacksize++;
+        break;
+      case("dlclose"):
+        if (stacksize < 1) {
+          writeln("stack underflow");
+          break;
+        }
+        stacksize--;
+        void* dl = cast(void*) stack.front();
+        stack.removeFront();
+        dlclose(dl);
+        break;
+      case("dlexec"):
+        if (stacksize < 2) {
+          writeln("stack underflow");
+          break;
+        }
+        void* fn = cast(void*) stack.front();
+        stacksize--;
+        stack.removeFront();
+        long[6] fnargs;
+        long arglen = stack.front();
+        stack.removeFront();
+        stacksize--;
+        long idx = 0;
+        while (stacksize > 1) {
+          fnargs[idx] = stack.front();
+          stacksize--;
+          stack.removeFront();
+          idx++;
+        }
+        switch (arglen) {
+          case(0):
+            long function() fnc = cast(long function()) fn;
+            stack.insertFront(fnc());
+            stacksize++;
+            break;
+          case(1):
+            long function(long) fnc = cast(long function(long)) fn;
+            stack.insertFront(fnc(fnargs[0]));
+            stacksize++;
+            break;
+          case(2):
+            long function(long, long) fnc = cast(long function(long, long)) fn;
+            stack.insertFront(fnc(fnargs[1], fnargs[0]));
+            stacksize++;
+            break;
+          case(3):
+            long function(long, long, long) fnc = cast(long function(long, long, long)) fn;
+            stack.insertFront(fnc(fnargs[2], fnargs[1], fnargs[0]));
+            stacksize++;
+            break;
+          case(4):
+            long function(long, long, long, long) fnc = cast(long function(long, long, long, long)) fn;
+            stack.insertFront(fnc(fnargs[3], fnargs[2], fnargs[1], fnargs[0]));
+            stacksize++;
+            break;
+          case(5):
+            long function(long, long, long, long, long) fnc = cast(long function(long, long, long, long, long)) fn;
+            stack.insertFront(fnc(fnargs[4], fnargs[3], fnargs[2], fnargs[1], fnargs[0]));
+            stacksize++;
+            break;
+          case(6):
+            long function(long, long, long, long, long, long) fnc = cast(long function(long, long, long, long, long, long)) fn;
+            stack.insertFront(fnc(fnargs[5], fnargs[4], fnargs[3], fnargs[2], fnargs[1], fnargs[0]));
+            stacksize++;
+            break;
+          default:
+            break;
+        }
+        break;
+      case("dlload"):
+        if (stacksize < 2) {
+          writeln("stack underflow");
+          break;
+        }
+        stacksize--;
+        char* tmp = cast(char*) stack.front();
+        stack.removeFront();
+        int len = 0;
+        for (; tmp[len]!=0; len++) { }
+        scope const char* strn = cast(const char*) tmp[0..len];
+        stacksize--;
+        void* dl = cast(void*) stack.front();
+        stack.removeFront();
+        long fn = cast(long) dlsym(dl, strn);
+        char* error = dlerror();
+        if (error) {
+          writeln("error loading dynamic function: ", fromStringz(error));
+          break;
+        }
+        stack.insertFront(fn);
+        stacksize++;
         break;
       default:
         int idx = 0;
