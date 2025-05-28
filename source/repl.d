@@ -12,6 +12,7 @@ import std.format.spec;
 import std.range;
 import std.range.primitives;
 import std.conv;
+import std.file; 
 
 import core.sys.posix.dlfcn;
 
@@ -75,7 +76,7 @@ void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str
     } else if (wordmode) {
       if (cdebug) writeln("word");
       wordtable[$-1] ~= s.dup;
-    } else if (s[0] == '"') {
+    } else if (s[0] == '"' && s.length != 1) {
       stringmode = true;
       stacksize++;
       strstart = strpos;
@@ -244,12 +245,8 @@ void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str
           break;
         }
         long count = stack.front();
-        stack.removeFront();
-        stacksize--;
-        for (;count && stacksize;count--) { 
-          stack.removeFront(); 
-          stacksize--; 
-        }
+        stack.removeFront(count+1);
+        stacksize -= count+1;
         break;
       case("eval"):
         if (stack.empty()) {
@@ -405,6 +402,7 @@ void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str
         if (cond) eval(strn.split(' '), stack, stacksize, str, strindx, strpos, exitloop, wordtable, cdebug);
         break;
       case("while"):
+        bool earlybreak = false;
         if (stacksize < 2) {
           writeln("stack underflow");
           break;
@@ -422,11 +420,14 @@ void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str
           eval(strn.split(' '), stack, stacksize, str, strindx, strpos, exitloop, wordtable, cdebug); 
           if (stacksize == 0) {
             writeln("stack underflow");
+            earlybreak = true;
             break;
           }
         }
-        stack.removeFront();
-        stacksize--;
+        if (!earlybreak) {
+          stack.removeFront();
+          stacksize--;
+        }
         break;
       case("dlopen"):
         if (stacksize < 1) {
@@ -537,6 +538,20 @@ void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str
         }
         stack.insertFront(fn);
         stacksize++;
+        break;
+      case("import"):
+        if (stacksize < 1) {
+          writeln("stack underflow");
+          break;
+        }
+        stacksize--;
+        char* tmp = cast(char*) stack.front();
+        stack.removeFront();
+        int len = 0;
+        for (; tmp[len]!=0; len++) { }
+        scope string strn = cast(string) tmp[0..len];
+        string data = to!string(read(strn));
+        eval(data.split('\n').join(' ').split(' '), stack, stacksize, str, strindx, strpos, exitloop, wordtable, cdebug);
         break;
       default:
         int idx = 0;

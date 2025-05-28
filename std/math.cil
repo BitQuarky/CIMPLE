@@ -1,1 +1,3 @@
-pow: "dup *"
+"swap 2 swapn dup 3 swapn * swap 1 - dup 1 >" drop
+pow: swap dup rot swap $1 1 while drop swap drop;
+

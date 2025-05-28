@@ -2,6 +2,9 @@ import std.stdio;
 import std.file; 
 import std.string;
 import std.experimental.allocator;
+import std.container.slist;
+
+import std.conv;
 
 enum Backend {Asm, JIT}
 
@@ -11,7 +14,7 @@ int main(string[] args)
   Backend back = Backend.JIT;
   char* l = cast(char*) processAllocator.makeArray!char(12);
   char* r = cast(char*) processAllocator.makeArray!char(12);
-  char* file = cast(char*) processAllocator.makeArray!char(64);
+  scope char* file = cast(char*) processAllocator.makeArray!char(64);
   foreach (s; args[1..$]) {
     sscanf(cast(char*) s, "-%11[a-zA-Z-]", l);
     switch (l[0]) {
@@ -53,8 +56,30 @@ int main(string[] args)
   processAllocator.dispose(l);
   processAllocator.dispose(r);
   
-  import repl : repl;
-  if (interactive) repl(cdebug);
+  import repl : repl, eval;
+  if (cfile) {
+    string contents = to!string(read(fromStringz(file)));
+    SList!long stack = SList!long();
+    char[256] strb;
+    char[] str = strb[];
+    int[] strindx;
+    string[][] wordtable;
+    int stacksize = 0;
+    int strpos = 0;
+    bool exitloop = false;
+    eval(contents.split('\n').join(' ').split(' '), stack, stacksize, str, strindx, strpos, exitloop, wordtable, cdebug);
+    if (interactive) {
+      char[] buf = new char[](64);
+      while (!exitloop) {
+        write("#> ");
+        readln(buf);
+        string line = cast(string) buf[0..buf.indexOf("\n")];
+        if (cdebug) writeln(line, " length is ", line.length);
+        eval(line.split(' '), stack, stacksize, str, strindx, strpos, exitloop, wordtable, cdebug);
+      }
+    }
+  }
+  else if (interactive) repl(cdebug);
 
   processAllocator.dispose(file);
   return 0;
