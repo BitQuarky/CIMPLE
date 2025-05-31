@@ -15,6 +15,7 @@ import std.conv;
 import std.file; 
 
 import core.sys.posix.dlfcn;
+import core.sys.windows.windows;
 
 long binaryWord(ref SList!long list, long function(long, long) fun) {
   long x = list.front;
@@ -31,6 +32,39 @@ bool compareWord(ref SList!long list, bool function(long, long) fun) {
   list.removeFront();
   return fun(y, x);
 }
+
+long loadLib(scope const(char*) name) {
+  version (Windows) {
+    return cast(long) LoadLibraryA(fromStringz(name).ptr);
+  }
+  version (Posix) {
+    return cast(long) dlopen(name, RTLD_LAZY);
+  } 
+  return 0;
+}
+
+void closeLib(long val) {
+  version(Windows) {
+    FreeLibrary(cast(HMODULE) val);
+  }
+  version(Posix) {
+    dlclose(cast(void*) val);
+  }
+}
+
+long libProcAddr(scope const(char*) name, long lib) {
+  version(Windows) {
+    return cast(long) GetProcAddress(cast(HMODULE) lib, fromStringz(name).ptr);
+  }
+  version(Posix) {
+    long tmp = cast(long) dlsym(cast(void*) lib, name);
+    char* error = dlerror();
+    if (error) {
+      writeln("error loading dynamic function: ", fromStringz(error));
+    }
+    return tmp;
+  }
+} 
 
 int repl(bool cdebug) {
   auto stack = SList!long();
@@ -440,11 +474,11 @@ void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str
         int len = 0;
         for (; tmp[len]!=0; len++) { }
         scope const char* strn = cast(const char*) tmp[0..len];
-        void* dl = dlopen(strn, RTLD_LAZY);
+        long dl = loadLib(strn);
         if (!dl) {
           writeln("failed to open dynamic library '", fromStringz(strn), "'");
         }
-        stack.insertFront(cast(long) dl);
+        stack.insertFront(dl);
         stacksize++;
         break;
       case("dlclose"):
@@ -453,9 +487,9 @@ void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str
           break;
         }
         stacksize--;
-        void* dl = cast(void*) stack.front();
+        long dl = stack.front();
         stack.removeFront();
-        dlclose(dl);
+        closeLib(dl);
         break;
       case("dlexec"):
         if (stacksize < 2) {
@@ -528,14 +562,10 @@ void eval(string[] line, ref SList!long stack, ref int stacksize, ref char[] str
         for (; tmp[len]!=0; len++) { }
         scope const char* strn = cast(const char*) tmp[0..len];
         stacksize--;
-        void* dl = cast(void*) stack.front();
+        long dl = stack.front();
         stack.removeFront();
-        long fn = cast(long) dlsym(dl, strn);
-        char* error = dlerror();
-        if (error) {
-          writeln("error loading dynamic function: ", fromStringz(error));
-          break;
-        }
+        long fn = libProcAddr(strn, dl);
+        if (fn == 0) break;
         stack.insertFront(fn);
         stacksize++;
         break;
